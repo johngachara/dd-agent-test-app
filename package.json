@@ -1,0 +1,17 @@
+{
+  "name": "dd-agent-test-app",
+  "version": "1.0.0",
+  "description": "Auth + user profile app — test target for dd-agent",
+  "scripts": {
+    "test": "node --test ai-tests/**/*.test.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0"
+  },
+  "dependencies": {
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  }
+}
