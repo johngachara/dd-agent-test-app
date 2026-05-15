@@ -8,68 +8,66 @@ import assert from 'node:assert/strict';
 import { validateProfileUpdate } from '../../../src/user/profile';
 
 describe('validateProfileUpdate', () => {
-  it('REQ-PROF-01.5: should return no errors for an empty payload (partial update)', () => {
-    const errors = validateProfileUpdate({});
-    assert.deepEqual(errors, {}, 'Empty payload should be valid');
+  it('REQ-PROF-01: should return no errors for a valid payload', () => {
+    const payload = { name: 'John Doe', bio: 'A new bio.' };
+    const errors = validateProfileUpdate(payload);
+    assert.deepEqual(errors, {}, 'A valid payload should result in no errors');
   });
 
-  it('REQ-PROF-01.5: should return no errors for a payload with only unvalidated fields', () => {
-    const errors = validateProfileUpdate({ bio: 'New bio here' });
-    assert.deepEqual(errors, {}, 'Payload with only unvalidated fields should be valid');
+  it('REQ-PROF-01: should return an error if name is provided and is less than 2 characters', () => {
+    const payload = { name: 'A' };
+    const errors = validateProfileUpdate(payload);
+    assert.equal(errors.name, 'Name must be at least 2 characters');
   });
 
-  it('REQ-PROF-01.1: should return an error if name is provided and is less than 2 characters', () => {
-    const errors = validateProfileUpdate({ name: 'a' });
-    assert.deepEqual(errors, { name: 'Name must be at least 2 characters' });
+  it('REQ-PROF-01: should return an error if name is provided and is less than 2 characters after trimming', () => {
+    const payload = { name: ' B ' };
+    const errors = validateProfileUpdate(payload);
+    assert.equal(errors.name, 'Name must be at least 2 characters');
   });
 
-  it('REQ-PROF-01.1: should return an error if name is provided and is less than 2 characters after trimming', () => {
-    const errors = validateProfileUpdate({ name: ' a ' });
-    assert.deepEqual(errors, { name: 'Name must be at least 2 characters' });
+  it('REQ-PROF-01: should not return a name error if name is not provided', () => {
+    const payload = { bio: 'Just updating my bio.' };
+    const errors = validateProfileUpdate(payload);
+    assert.equal(errors.name, undefined, 'Partial updates without a name should be allowed');
   });
 
-  it('REQ-PROF-01.1: should return no error if name is exactly 2 characters', () => {
-    const errors = validateProfileUpdate({ name: 'ab' });
-    assert.deepEqual(errors, {}, 'Name with 2 characters should be valid');
+  it('REQ-PROF-01: should return an error if email is provided and is invalid', () => {
+    const payload = { email: 'not-an-email' };
+    const errors = validateProfileUpdate(payload);
+    assert.equal(errors.email, 'Please enter a valid email address');
   });
 
-  it('REQ-PROF-01.2: should return an error if email is provided and is not a valid format', () => {
-    const errors = validateProfileUpdate({ email: 'invalid-email' });
-    assert.deepEqual(errors, { email: 'Please enter a valid email address' });
+  it('REQ-PROF-01: should return an error if email is provided but currentPassword is not', () => {
+    const payload = { email: 'new.email@example.com' };
+    const errors = validateProfileUpdate(payload);
+    assert.equal(errors.currentPassword, 'Current password is required to change email');
   });
 
-  it('REQ-PROF-01.3: should return an error if email is provided but currentPassword is not', () => {
-    const errors = validateProfileUpdate({ email: 'new@example.com' });
-    assert.deepEqual(errors, { currentPassword: 'Current password is required to change email' });
+  it('REQ-PROF-01: should not return a password error if email is not provided', () => {
+    const payload = { name: 'Just a name update' };
+    const errors = validateProfileUpdate(payload);
+    assert.equal(errors.currentPassword, undefined, 'Password should not be required if email is not being updated');
   });
 
-  it('REQ-PROF-01.3: should not check for currentPassword if email format is invalid', () => {
-    // The implementation uses an else-if, so the password check is skipped if the email format is invalid.
-    const errors = validateProfileUpdate({ email: 'invalid-email' });
-    assert.deepEqual(errors, { email: 'Please enter a valid email address' });
+  it('REQ-PROF-01: should return no email/password errors if both are provided and email is valid', () => {
+    const payload = { email: 'new.email@example.com', currentPassword: 'password123' };
+    const errors = validateProfileUpdate(payload);
+    assert.equal(errors.email, undefined);
+    assert.equal(errors.currentPassword, undefined);
   });
 
-  it('should return no errors if a valid email and currentPassword are provided', () => {
-    const errors = validateProfileUpdate({
-      email: 'new@example.com',
-      currentPassword: 'password123',
-    });
-    assert.deepEqual(errors, {}, 'Valid email change with password should be valid');
+  it('REQ-PROF-01: should allow partial updates where only non-validated fields are present', () => {
+    const payload = { bio: 'This is my new biography.' };
+    const errors = validateProfileUpdate(payload);
+    assert.deepEqual(errors, {}, 'Updating only a non-validated field like bio should be valid');
   });
 
-  it('should return multiple errors if multiple fields are invalid', () => {
-    const errors = validateProfileUpdate({
-      name: 'a',
-      email: 'invalid-email',
-    });
-    assert.deepEqual(errors, {
-      name: 'Name must be at least 2 characters',
-      email: 'Please enter a valid email address',
-    });
-  });
-
-  it('REQ-PROF-01.4: should not validate or require currentPassword if email is not in the payload', () => {
-    const errors = validateProfileUpdate({ name: 'A valid name' });
-    assert.deepEqual(errors, {}, 'Should not validate password if email is not being updated');
+  it('REQ-PROF-01: should return multiple errors if multiple fields are invalid', () => {
+    const payload = { name: 'X', email: 'invalid-email' };
+    const errors = validateProfileUpdate(payload);
+    assert.equal(errors.name, 'Name must be at least 2 characters');
+    assert.equal(errors.email, 'Please enter a valid email address');
+    assert.equal(errors.currentPassword, 'Current password is required to change email');
   });
 });
