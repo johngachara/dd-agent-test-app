@@ -1,9 +1,10 @@
+import test from 'node:test';
 /**
  * @requirement REQ-AUTH-01
  * @source docs/requirements/sub-requirements/REQ-AUTH-01.md
  * @generated-by dd-agent app-mode 2026-05-15
  */
-import { describe, it } from 'node:test';
+import test, { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validateEmail,
@@ -13,68 +14,50 @@ import {
 
 describe('validators', () => {
   describe('validateEmail', () => {
-    it('REQ-AUTH-01: should return true for a valid email address', () => {
+    it('should return true for valid email addresses', () => {
       assert.ok(validateEmail('test@example.com'));
+      assert.ok(validateEmail('user.name+tag@gmail.co.uk'));
+      assert.ok(validateEmail('a@b.c'));
     });
 
-    it('REQ-AUTH-01: should return true for a valid email with subdomains', () => {
-      assert.ok(validateEmail('test@mail.example.com'));
+    it('should return false for invalid email addresses', () => {
+      assert.equal(validateEmail(''), false, 'empty string');
+      assert.equal(validateEmail('test'), false, 'no @ symbol');
+      assert.equal(validateEmail('test@'), false, 'no domain');
+      assert.equal(validateEmail('@example.com'), false, 'no local part');
+      assert.equal(validateEmail('test@example'), false, 'no TLD');
+      assert.equal(validateEmail('test @example.com'), false, 'contains space');
     });
 
-    it('REQ-AUTH-01: should return true for a valid email and trim whitespace', () => {
+    it('should trim whitespace before validating', () => {
       assert.ok(validateEmail('  test@example.com  '));
-    });
-
-    it('REQ-AUTH-01: should return false for an email without an @ symbol', () => {
-      assert.equal(validateEmail('testexample.com'), false);
-    });
-
-    it('REQ-AUTH-01: should return false for an email without a domain', () => {
-      assert.equal(validateEmail('test@'), false);
-    });
-
-    it('REQ-AUTH-01: should return false for an email without a user part', () => {
-      assert.equal(validateEmail('@example.com'), false);
-    });
-
-    it('REQ-AUTH-01: should return false for an empty string', () => {
-      assert.equal(validateEmail(''), false);
     });
   });
 
   describe('validatePassword', () => {
-    it('should return true for a password of 8 characters', () => {
+    it('should return true for passwords with 8 or more characters', () => {
       assert.ok(validatePassword('12345678'));
+      assert.ok(validatePassword('a-very-long-password'));
     });
 
-    it('should return true for a password longer than 8 characters', () => {
-      assert.ok(validatePassword('123456789'));
-    });
-
-    it('should return false for a password shorter than 8 characters', () => {
+    it('should return false for passwords with fewer than 8 characters', () => {
       assert.equal(validatePassword('1234567'), false);
-    });
-
-    it('should return false for an empty password', () => {
       assert.equal(validatePassword(''), false);
     });
   });
 
   describe('validateRequired', () => {
-    it('REQ-AUTH-01: should return undefined for a non-empty string', () => {
-      assert.equal(validateRequired('some value', 'Field'), undefined);
+    it('should return undefined for non-empty strings', () => {
+      assert.equal(validateRequired('hello', 'Field'), undefined);
+      assert.equal(validateRequired(' a ', 'Field'), undefined);
     });
 
-    it('REQ-AUTH-01: should return an error message for an empty string', () => {
+    it('should return an error message for an empty string', () => {
       assert.equal(validateRequired('', 'Email'), 'Email is required');
     });
 
-    it('REQ-AUTH-01: should return an error message for a string with only whitespace', () => {
+    it('should return an error message for a whitespace-only string', () => {
       assert.equal(validateRequired('   ', 'Password'), 'Password is required');
-    });
-
-    it('REQ-AUTH-01: should return undefined for a non-empty string that has whitespace to be trimmed', () => {
-      assert.equal(validateRequired('  value  ', 'Field'), undefined);
     });
   });
 });
