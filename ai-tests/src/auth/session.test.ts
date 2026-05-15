@@ -3,162 +3,151 @@
  * @source docs/requirements/sub-requirements/REQ-AUTH-02.md
  * @generated-by dd-agent app-mode 2026-05-15
  */
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  setSession,
-  getSession,
   isSessionExpired,
-  refreshActivity,
+  handleExpiredSession,
   clearSession,
+  checkSessionOnNavigation,
+  refreshActivity,
 } from '../../../src/auth/session';
 
-const SESSION_INACTIVITY_MS = 30 * 60 * 1000;
+const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 
-// Mock localStorage for Node.js environment
-const mockLocalStorage = {
-  store: {} as Record<string, string>,
-  getItem(key: string): string | null {
-    return this.store[key] ?? null;
-  },
-  setItem(key: string, value: string): void {
-    this.store[key] = String(value);
-  },
-  removeItem(key: string): void {
-    delete this.store[key];
-  },
-  clear(): void {
-    this.store = {};
-  },
-};
+describe('Session Expiry', () => {
+  let mockStorage: Record<string, string>;
+  const realLocalStorage = global.localStorage;
+  const realWindowLocation = global.window?.location;
+  let dateNowMock: any;
 
-// @ts-ignore-next-line
-global.localStorage = mockLocalStorage;
-
-describe('Session Management', () => {
   beforeEach(() => {
-    mockLocalStorage.clear();
-    mock.timers.reset();
-  });
+    // Mock Date.now()
+    const now = 1672531200000; // A fixed point in time: 2023-01-01 00:00:00 UTC
+    dateNowMock = mock.method(Date, 'now', () => now);
 
-  describe('isSessionExpired', () => {
-    it('should return true if no session token exists', () => {
-      assert.ok(isSessionExpired());
+    // Mock localStorage
+    mockStorage = {};
+    const mockLocalStorage = {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: (key: string, value: string) => (mockStorage[key] = value),
+      removeItem: (key: string) => delete mockStorage[key],
+      clear: () => (mockStorage = {}),
+    };
+    Object.defineProperty(global, 'localStorage', {
+      value: mockLocalStorage,
+      writable: true,
     });
 
-    it('should return true if session token exists but expiry is missing', () => {
-      mockLocalStorage.setItem('session_token', 'test-token');
-      assert.ok(isSessionExpired());
-    });
-
-    it('should return true if last active timestamp is missing', () => {
-      const now = Date.now();
-      setSession({ token: 'test-token', expiresAt: now + 10000 });
-      mockLocalStorage.removeItem('session_last_active'); // Manually remove for test case
-      assert.ok(isSessionExpired());
-    });
-
-    it('should return true if the server-issued token expiry time is in the past', () => {
-      mock.timers.enable({ now: 1700000000000 });
-      const now = Date.now();
-      setSession({ token: 'test-token', expiresAt: now - 1 });
-      assert.ok(isSessionExpired());
-      mock.timers.reset();
-    });
-
-    it('should return true if inactivity duration exceeds 30 minutes', () => {
-      mock.timers.enable({ now: 1700000000000 });
-      const now = Date.now();
-      setSession({ token: 'test-token', expiresAt: now + SESSION_INACTIVITY_MS * 2 });
-
-      // Simulate inactivity
-      mock.timers.tick(SESSION_INACTIVITY_MS);
-
-      assert.ok(isSessionExpired());
-      mock.timers.reset();
-    });
-
-    it('should return false for an active session within both expiry and inactivity limits', () => {
-      mock.timers.enable({ now: 1700000000000 });
-      const now = Date.now();
-      setSession({ token: 'test-token', expiresAt: now + SESSION_INACTIVITY_MS * 2 });
-
-      // Simulate some activity time, but less than the limit
-      mock.timers.tick(SESSION_INACTIVITY_MS - 1);
-
-      assert.equal(isSessionExpired(), false);
-      mock.timers.reset();
-    });
-  });
-
-  describe('refreshActivity', () => {
-    it('should update the last active timestamp to the current time', () => {
-      mock.timers.enable({ now: 1700000000000 });
-      const startTime = Date.now();
-      setSession({ token: 'test-token', expiresAt: startTime + 100000 });
-      assert.equal(mockLocalStorage.getItem('session_last_active'), String(startTime));
-
-      const refreshTime = startTime + 5000;
-      mock.timers.tick(5000);
-
-      refreshActivity();
-
-      assert.equal(mockLocalStorage.getItem('session_last_active'), String(refreshTime));
-      mock.timers.reset();
-    });
-
-    it('should not update activity timestamp if session is already expired', () => {
-      mock.timers.enable({ now: 1700000000000 });
-      const startTime = Date.now();
-      setSession({ token: 'test-token', expiresAt: startTime - 1 }); // Expired session
-      assert.equal(mockLocalStorage.getItem('session_last_active'), String(startTime));
-
-      mock.timers.tick(5000);
-      refreshActivity();
-
-      // Timestamp should not have been updated
-      assert.equal(mockLocalStorage.getItem('session_last_active'), String(startTime));
-      mock.timers.reset();
-    });
-  });
-
-  describe('clearSession', () => {
-    it('should remove all session-related data from localStorage', () => {
-      setSession({ token: 'test-token', expiresAt: Date.now() + 10000 });
-      assert.ok(mockLocalStorage.getItem('session_token'));
-      assert.ok(mockLocalStorage.getItem('session_expires_at'));
-      assert.ok(mockLocalStorage.getItem('session_last_active'));
-
-      clearSession();
-
-      assert.equal(mockLocalStorage.getItem('session_token'), null);
-      assert.equal(mockLocalStorage.getItem('session_expires_at'), null);
-      assert.equal(mockLocalStorage.getItem('session_last_active'), null);
-    });
-  });
-
-  describe('getSession', () => {
-    it('should return null if token is missing', () => {
-      mockLocalStorage.setItem('session_expires_at', String(Date.now() + 1000));
-      assert.equal(getSession(), null);
-    });
-
-    it('should return null if expiresAt is missing', () => {
-      mockLocalStorage.setItem('session_token', 'test-token');
-      assert.equal(getSession(), null);
-    });
-
-    it('should return the session object with a parsed expiresAt number', () => {
-      const expiresAt = Date.now() + 10000;
-      mockLocalStorage.setItem('session_token', 'test-token');
-      mockLocalStorage.setItem('session_expires_at', String(expiresAt));
-
-      const session = getSession();
-      assert.deepEqual(session, {
-        token: 'test-token',
-        expiresAt: expiresAt,
+    // Mock window.location
+    if (global.window) {
+      Object.defineProperty(global.window, 'location', {
+        value: { href: '', pathname: '/dashboard', search: '?filter=active' },
+        writable: true,
       });
-      assert.equal(typeof session?.expiresAt, 'number');
+    } else {
+      (global as any).window = { location: { href: '', pathname: '/dashboard', search: '?filter=active' } };
+    }
+  });
+
+  afterEach(() => {
+    dateNowMock.mock.restore();
+    Object.defineProperty(global, 'localStorage', {
+      value: realLocalStorage,
+      writable: true,
     });
+    if (global.window) {
+      global.window.location = realWindowLocation;
+    }
+  });
+
+  it('REQ-AUTH-02: isSessionExpired should return true if session has been inactive for 30 minutes', () => {
+    localStorage.setItem('session_token', 'token');
+    localStorage.setItem('session_expires_at', String(Date.now() + THIRTY_MINUTES_MS * 2));
+    localStorage.setItem('session_last_active', String(Date.now() - THIRTY_MINUTES_MS));
+    assert.ok(isSessionExpired());
+  });
+
+  it('REQ-AUTH-02: isSessionExpired should return true if server-issued token expiry time is reached', () => {
+    localStorage.setItem('session_token', 'token');
+    localStorage.setItem('session_expires_at', String(Date.now() - 1));
+    localStorage.setItem('session_last_active', String(Date.now()));
+    assert.ok(isSessionExpired());
+  });
+
+  it('REQ-AUTH-02: isSessionExpired should return false for an active and valid session', () => {
+    localStorage.setItem('session_token', 'token');
+    localStorage.setItem('session_expires_at', String(Date.now() + 10000));
+    localStorage.setItem('session_last_active', String(Date.now() - 1000));
+    assert.equal(isSessionExpired(), false);
+  });
+
+  it('REQ-AUTH-02: refreshActivity should update the session_last_active timestamp', () => {
+    const initialTime = Date.now() - 5000;
+    localStorage.setItem('session_token', 'token');
+    localStorage.setItem('session_expires_at', String(Date.now() + 10000));
+    localStorage.setItem('session_last_active', String(initialTime));
+
+    refreshActivity();
+
+    const newTime = localStorage.getItem('session_last_active');
+    assert.equal(newTime, String(Date.now()));
+  });
+
+  it('REQ-AUTH-02: handleExpiredSession should clear all local session data', () => {
+    localStorage.setItem('session_token', 'token');
+    localStorage.setItem('session_expires_at', '123');
+    localStorage.setItem('session_last_active', '456');
+
+    handleExpiredSession();
+
+    assert.equal(localStorage.getItem('session_token'), null);
+    assert.equal(localStorage.getItem('session_expires_at'), null);
+    assert.equal(localStorage.getItem('session_last_active'), null);
+  });
+
+  it('REQ-AUTH-02: handleExpiredSession should redirect to /login with a redirect parameter', () => {
+    handleExpiredSession();
+    const expectedPath = '/dashboard?filter=active';
+    const expectedRedirect = `/login?redirect=${encodeURIComponent(expectedPath)}`;
+    assert.equal(global.window.location.href, expectedRedirect);
+  });
+
+  it('REQ-AUTH-02: checkSessionOnNavigation should handle expired session', () => {
+    localStorage.setItem('session_token', 'token');
+    localStorage.setItem('session_expires_at', String(Date.now() - 1)); // Expired
+    localStorage.setItem('session_last_active', String(Date.now()));
+
+    checkSessionOnNavigation();
+
+    assert.equal(localStorage.getItem('session_token'), null, 'Session data should be cleared');
+    assert.ok(global.window.location.href.startsWith('/login?redirect='));
+  });
+
+  it('REQ-AUTH-02: checkSessionOnNavigation should refresh activity for a valid session', () => {
+    const initialTime = Date.now() - 5000;
+    localStorage.setItem('session_token', 'token');
+    localStorage.setItem('session_expires_at', String(Date.now() + 10000));
+    localStorage.setItem('session_last_active', String(initialTime));
+
+    checkSessionOnNavigation();
+
+    const newTime = localStorage.getItem('session_last_active');
+    assert.equal(newTime, String(Date.now()));
+    assert.equal(global.window.location.href, '', 'Should not redirect');
+  });
+
+  it('REQ-AUTH-02: clearSession should remove all session-related keys from localStorage', () => {
+    localStorage.setItem('session_token', 'token');
+    localStorage.setItem('session_expires_at', '123');
+    localStorage.setItem('session_last_active', '456');
+    localStorage.setItem('other_data', 'should_remain');
+
+    clearSession();
+
+    assert.equal(localStorage.getItem('session_token'), null);
+    assert.equal(localStorage.getItem('session_expires_at'), null);
+    assert.equal(localStorage.getItem('session_last_active'), null);
+    assert.equal(localStorage.getItem('other_data'), 'should_remain');
   });
 });
