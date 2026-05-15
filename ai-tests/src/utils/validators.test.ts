@@ -14,50 +14,52 @@ import {
 
 describe('validators', () => {
   describe('validateEmail', () => {
-    it('should return true for valid email addresses', () => {
-      assert.ok(validateEmail('test@example.com'));
-      assert.ok(validateEmail('user.name+tag@gmail.co.uk'));
-      assert.ok(validateEmail('a@b.c'));
+    it('[REQ-AUTH-01] should return true for valid email addresses', () => {
+      assert.strictEqual(validateEmail('test@example.com'), true);
+      assert.strictEqual(validateEmail('user.name+tag@gmail.co.uk'), true);
+      assert.strictEqual(validateEmail('   leading@space.com '), true, 'should trim whitespace');
     });
 
-    it('should return false for invalid email addresses', () => {
-      assert.equal(validateEmail(''), false, 'empty string');
-      assert.equal(validateEmail('test'), false, 'no @ symbol');
-      assert.equal(validateEmail('test@'), false, 'no domain');
-      assert.equal(validateEmail('@example.com'), false, 'no local part');
-      assert.equal(validateEmail('test@example'), false, 'no TLD');
-      assert.equal(validateEmail('test @example.com'), false, 'contains space');
-    });
-
-    it('should trim whitespace before validating', () => {
-      assert.ok(validateEmail('  test@example.com  '));
+    it('[REQ-AUTH-01] should return false for invalid email addresses', () => {
+      assert.strictEqual(validateEmail(''), false, 'empty string is invalid');
+      assert.strictEqual(validateEmail('plainaddress'), false, 'missing @ and domain');
+      assert.strictEqual(validateEmail('@missing-local.com'), false, 'missing local part');
+      assert.strictEqual(validateEmail('missing-at.com'), false, 'missing @ symbol');
+      assert.strictEqual(validateEmail('user@missing-tld'), false, 'missing top-level domain');
+      assert.strictEqual(validateEmail('user@.com'), false, 'domain starts with dot');
+      assert.strictEqual(validateEmail('user@domain..com'), false, 'double dot in domain');
+      assert.strictEqual(validateEmail('user with space@domain.com'), false, 'space in local part');
     });
   });
 
   describe('validatePassword', () => {
-    it('should return true for passwords with 8 or more characters', () => {
-      assert.ok(validatePassword('12345678'));
-      assert.ok(validatePassword('a-very-long-password'));
+    it('[REQ-AUTH-05] should return true for passwords with 8 or more characters', () => {
+      assert.strictEqual(validatePassword('12345678'), true, '8 characters should be valid');
+      assert.strictEqual(validatePassword('password123'), true, 'more than 8 characters should be valid');
     });
 
-    it('should return false for passwords with fewer than 8 characters', () => {
-      assert.equal(validatePassword('1234567'), false);
-      assert.equal(validatePassword(''), false);
+    it('[REQ-AUTH-05] should return false for passwords with fewer than 8 characters', () => {
+      assert.strictEqual(validatePassword('1234567'), false, '7 characters should be invalid');
+      assert.strictEqual(validatePassword(''), false, 'empty string should be invalid');
     });
   });
 
   describe('validateRequired', () => {
-    it('should return undefined for non-empty strings', () => {
-      assert.equal(validateRequired('hello', 'Field'), undefined);
-      assert.equal(validateRequired(' a ', 'Field'), undefined);
+    it('[REQ-AUTH-01] should return undefined for non-empty strings', () => {
+      assert.strictEqual(validateRequired('some value', 'Field'), undefined);
+      assert.strictEqual(validateRequired(' a ', 'Field'), undefined, 'should be valid with whitespace around');
     });
 
-    it('should return an error message for an empty string', () => {
-      assert.equal(validateRequired('', 'Email'), 'Email is required');
+    it('[REQ-AUTH-01] should return an error message for empty strings', () => {
+      assert.strictEqual(validateRequired('', 'Email'), 'Email is required');
     });
 
-    it('should return an error message for a whitespace-only string', () => {
-      assert.equal(validateRequired('   ', 'Password'), 'Password is required');
+    it('[REQ-AUTH-01] should return an error message for strings with only whitespace', () => {
+      assert.strictEqual(validateRequired('   ', 'Password'), 'Password is required');
+    });
+
+    it('should use the provided fieldName in the error message', () => {
+      assert.strictEqual(validateRequired('', 'Custom Field'), 'Custom Field is required');
     });
   });
 });
